@@ -162,7 +162,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=actor$index'),
                 ),
                 const SizedBox(height: 8),
-                const Text('Ator ${index + 1}', style: TextStyle(fontSize: 12)),
+                Text('Ator ${index + 1}', style: const TextStyle(fontSize: 12)),
               ],
             ),
           );
@@ -248,7 +248,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                             child: LinearProgressIndicator(
                               value: (5 - index) / 5,
                               backgroundColor: Colors.white10,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.orange.withOpacity(0.7)),
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.orange.withValues(alpha: 0.7)),
                               minHeight: 8,
                             ),
                           ),

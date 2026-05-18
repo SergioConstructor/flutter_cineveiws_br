@@ -6,7 +6,7 @@ class FeedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colorscheme = Theme.of(context).colorScheme;
 
     return DefaultTabController(
       length: 2,
