@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'onboarding_genre_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,19 +11,30 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
   bool _isPasswordVisible = false;
+  bool _isLogin = true;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _nameController.dispose();
     super.dispose();
+  }
+
+  void _submit() {
+    // Simulating authentication
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const OnboardingGenreScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF14181C), // Letterboxd-like dark background
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -31,72 +43,79 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Logo or Icon
-                const Icon(
-                  Icons.movie_creation_rounded,
+                Icon(
+                  Icons.movie_filter_rounded,
                   size: 80,
-                  color: Color(0xFF00E054), // Letterboxd-like green accent
+                  color: colorScheme.primary,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 const Text(
                   'CineViews BR',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
                     letterSpacing: 1.2,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Sua rede social de filmes e séries.',
+                Text(
+                  _isLogin ? 'Sua rede social de cinema' : 'Crie sua conta agora',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 16,
                     color: Colors.white70,
                   ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 40),
 
-                // Email Input
+                if (!_isLogin) ...[
+                  TextField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Nome Completo',
+                      filled: true,
+                      fillColor: colorScheme.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      prefixIcon: const Icon(Icons.person_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 TextField(
                   controller: _emailController,
-                  style: const TextStyle(color: Colors.white),
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: 'E-mail ou Usuário',
-                    labelStyle: const TextStyle(color: Colors.white54),
+                    labelText: 'E-mail',
                     filled: true,
-                    fillColor: const Color(0xFF2C3440),
+                    fillColor: colorScheme.surface,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8.0),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.person, color: Colors.white54),
+                    prefixIcon: const Icon(Icons.email_outlined),
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                // Password Input
                 TextField(
                   controller: _passwordController,
-                  style: const TextStyle(color: Colors.white),
                   obscureText: !_isPasswordVisible,
                   decoration: InputDecoration(
                     labelText: 'Senha',
-                    labelStyle: const TextStyle(color: Colors.white54),
                     filled: true,
-                    fillColor: const Color(0xFF2C3440),
+                    fillColor: colorScheme.surface,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8.0),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.lock, color: Colors.white54),
+                    prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                        color: Colors.white54,
                       ),
                       onPressed: () {
                         setState(() {
@@ -106,55 +125,41 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
 
-                // Login Button
                 ElevatedButton(
-                  onPressed: () {
-                    // TODO: Implement login logic
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Login em desenvolvimento')),
-                    );
-                  },
+                  onPressed: _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E054), // Green accent
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8.0),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'ENTRAR',
-                    style: TextStyle(
+                  child: Text(
+                    _isLogin ? 'ENTRAR' : 'CADASTRAR',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                // Forgot Password / Create Account
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text(
-                        'Esqueci a senha',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text(
-                        'Criar conta',
-                        style: TextStyle(color: Color(0xFF40BCF4)), // Blue accent
-                      ),
-                    ),
-                  ],
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isLogin = !_isLogin;
+                    });
+                  },
+                  child: Text(
+                    _isLogin
+                        ? 'Não tem uma conta? Cadastre-se'
+                        : 'Já possui uma conta? Entre',
+                    style: TextStyle(color: colorScheme.primary),
+                  ),
                 ),
               ],
             ),
