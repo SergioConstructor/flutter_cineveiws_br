@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../providers/list_provider.dart';
 import '../providers/movie_provider.dart';
+import '../providers/social_provider.dart';
 import '../models/movie.dart';
 import 'movie_detail_screen.dart';
 import 'list_edit_screen.dart';
@@ -87,12 +88,13 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
             ? 0.0
             : watchedCount / movieList.movieIds.length;
 
+        final currentUser = context.read<SocialProvider>().currentUser;
+
         return Scaffold(
           appBar: AppBar(
             title: const Text('Detalhes da Lista'),
             actions: [
-              if (movieList.authorId ==
-                  context.read<dynamic>().toString()) // owner check simplified
+              if (movieList.authorId == currentUser?.id)
                 IconButton(
                   icon: const Icon(Icons.edit),
                   onPressed: () {
