@@ -1,21 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import '../providers/movie_provider.dart';
+import '../providers/social_provider.dart';
+import '../models/movie.dart';
+import '../models/cast_member.dart';
+import '../models/review.dart';
+import 'review_detail_screen.dart';
+import 'widgets/log_movie_dialog.dart';
 
 class MovieDetailScreen extends StatefulWidget {
-  const MovieDetailScreen({super.key});
+  final int movieId;
+
+  const MovieDetailScreen({super.key, required this.movieId});
 
   @override
   State<MovieDetailScreen> createState() => _MovieDetailScreenState();
 }
 
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
-  double _userRating = 0.0;
-  bool _watched = false;
-  bool _watchlist = false;
+  Movie? _movie;
+  List<CastMember> _cast = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final movieProvider = context.read<MovieProvider>();
+    final movie = await movieProvider.getMovieDetails(widget.movieId);
+    final cast = await movieProvider.getMovieCredits(widget.movieId);
+
+    if (mounted) {
+      setState(() {
+        _movie = movie;
+        _cast = cast.take(10).toList();
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_movie == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('Erro ao carregar filme')),
+      );
+    }
+
+    final movie = _movie!;
 
     return Scaffold(
       body: CustomScrollView(
@@ -27,10 +73,16 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  CachedNetworkImage(
-                    imageUrl: 'https://picsum.photos/seed/movie_backdrop/800/600',
-                    fit: BoxFit.cover,
-                  ),
+                  movie.backdropUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: movie.backdropUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (c, u) =>
+                              Container(color: Colors.grey[900]),
+                          errorWidget: (c, u, e) =>
+                              Container(color: Colors.grey[900]),
+                        )
+                      : Container(color: Colors.grey[900]),
                   Container(
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
@@ -53,90 +105,135 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
-                        imageUrl: 'https://picsum.photos/seed/movie_poster/200/300',
-                        width: 120,
-                        height: 180,
-                        fit: BoxFit.cover,
-                      ),
+                      child: movie.posterUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: movie.posterUrl,
+                              width: 120,
+                              height: 180,
+                              fit: BoxFit.cover,
+                              placeholder: (c, u) =>
+                                  Container(width: 120, height: 180, color: Colors.grey[800]),
+                              errorWidget: (c, u, e) =>
+                                  Container(width: 120, height: 180, color: Colors.grey[800]),
+                            )
+                          : Container(
+                              width: 120, height: 180, color: Colors.grey[800]),
                     ),
                     const SizedBox(width: 20),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Blade Runner 2049',
-                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          Text(
+                            movie.title,
+                            style: const TextStyle(
+                                fontSize: 24, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            '2017 • 2h 44m',
-                            style: TextStyle(color: Colors.white70),
+                          Text(
+                            '${movie.year} • ${movie.runtimeFormatted}',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(Icons.star_rounded,
+                                  color: Colors.orange[400], size: 18),
+                              const SizedBox(width: 4),
+                              Text(
+                                movie.voteAverage.toStringAsFixed(1),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Text(
+                                ' (${movie.voteCount})',
+                                style: const TextStyle(
+                                    color: Colors.white54, fontSize: 12),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            children: ['Ficção Científica', 'Drama', 'Mistério'].map((g) {
-                              return Chip(
-                                label: Text(g, style: const TextStyle(fontSize: 10)),
-                                backgroundColor: colorScheme.surface,
-                                padding: EdgeInsets.zero,
-                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              );
-                            }).toList(),
-                          ),
+                          if (movie.genres != null)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: movie.genres!.map((g) {
+                                return Chip(
+                                  label: Text(g,
+                                      style: const TextStyle(fontSize: 10)),
+                                  backgroundColor: colorScheme.surface,
+                                  padding: EdgeInsets.zero,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                );
+                              }).toList(),
+                            ),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Action Buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _ActionButton(
-                      icon: _watched ? Icons.check_circle : Icons.check_circle_outline,
-                      label: 'Assistido',
-                      isActive: _watched,
-                      onTap: () => setState(() => _watched = !_watched),
-                    ),
-                    _ActionButton(
-                      icon: _watchlist ? Icons.bookmark : Icons.bookmark_border,
-                      label: 'Quero Ver',
-                      isActive: _watchlist,
-                      onTap: () => setState(() => _watchlist = !_watchlist),
-                    ),
-                    _ActionButton(
-                      icon: Icons.list,
-                      label: 'Listas',
-                      onTap: () {},
-                    ),
-                  ],
+                Consumer<MovieProvider>(
+                  builder: (context, mp, _) {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _ActionButton(
+                          icon: mp.isWatched(movie.id)
+                              ? Icons.check_circle
+                              : Icons.check_circle_outline,
+                          label: 'Assistido',
+                          isActive: mp.isWatched(movie.id),
+                          onTap: () => mp.toggleWatched(movie.id),
+                        ),
+                        _ActionButton(
+                          icon: mp.isInWatchlist(movie.id)
+                              ? Icons.bookmark
+                              : Icons.bookmark_border,
+                          label: 'Quero Ver',
+                          isActive: mp.isInWatchlist(movie.id),
+                          onTap: () => mp.toggleWatchlist(movie.id),
+                        ),
+                        _ActionButton(
+                          icon: Icons.edit_calendar,
+                          label: 'Diário',
+                          onTap: () => LogMovieDialog.show(
+                            context,
+                            preselectedMovie: movie,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 32),
 
-                const Text('Sinopse', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('Sinopse',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                const Text(
-                  'Trinta anos após os eventos do primeiro filme, um novo blade runner, o oficial K do LAPD, descobre um segredo enterrado há muito tempo que tem o potencial de mergulhar o que resta da sociedade no caos.',
-                  style: TextStyle(color: Colors.white70, height: 1.5),
+                Text(
+                  movie.overview.isNotEmpty
+                      ? movie.overview
+                      : 'Sinopse não disponível em português.',
+                  style: const TextStyle(color: Colors.white70, height: 1.5),
                 ),
                 const SizedBox(height: 32),
 
-                const Text('Elenco Principal', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                _buildCastList(),
-                const SizedBox(height: 32),
+                if (_cast.isNotEmpty) ...[
+                  const Text('Elenco Principal',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  _buildCastList(),
+                  const SizedBox(height: 32),
+                ],
 
-                // User Rating Section
-                _buildUserRatingSection(colorScheme),
-                const SizedBox(height: 32),
-
-                // Community Rating Section
-                _buildCommunitySection(),
+                // Community Reviews
+                _buildCommunityReviews(colorScheme),
                 const SizedBox(height: 40),
               ]),
             ),
@@ -151,18 +248,33 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       height: 100,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: 5,
+        itemCount: _cast.length,
         itemBuilder: (context, index) {
+          final member = _cast[index];
           return Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Column(
               children: [
                 CircleAvatar(
                   radius: 30,
-                  backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=actor$index'),
+                  backgroundImage: member.hasImage
+                      ? NetworkImage(member.profileUrl)
+                      : null,
+                  child: member.hasImage
+                      ? null
+                      : const Icon(Icons.person, size: 30),
                 ),
                 const SizedBox(height: 8),
-                Text('Ator ${index + 1}', style: const TextStyle(fontSize: 12)),
+                SizedBox(
+                  width: 70,
+                  child: Text(
+                    member.name,
+                    style: const TextStyle(fontSize: 11),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           );
@@ -171,97 +283,129 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     );
   }
 
-  Widget _buildUserRatingSection(ColorScheme colorScheme) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          const Text('Sua Avaliação', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(5, (index) {
-              return IconButton(
-                onPressed: () => setState(() => _userRating = index + 1.0),
-                icon: Icon(
-                  index < _userRating ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: index < _userRating ? Colors.orange : Colors.white24,
-                  size: 36,
+  Widget _buildCommunityReviews(ColorScheme colorScheme) {
+    return Consumer<SocialProvider>(
+      builder: (context, socialProvider, _) {
+        final reviews = socialProvider.getReviewsByMovie(widget.movieId);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Resenhas da Comunidade',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                if (reviews.length > 2)
+                  TextButton(
+                    onPressed: () {},
+                    child: const Text('Ver todas'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (reviews.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              );
-            }),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText: 'Escreva sua resenha...',
-              filled: true,
-              fillColor: Colors.black26,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {},
-              child: const Text('SALVAR RESENHA'),
-            ),
-          ),
-        ],
-      ),
+                child: const Center(
+                  child: Text(
+                    'Nenhuma resenha ainda. Seja o primeiro!',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+              )
+            else
+              ...reviews.take(3).map((review) => _buildReviewCard(review)),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildCommunitySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('O que a comunidade achou', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Column(
-              children: [
-                Text('4.2', style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.orange)),
-                const Text('de 5', style: TextStyle(color: Colors.white54)),
-              ],
-            ),
-            const SizedBox(width: 32),
-            Expanded(
-              child: Column(
-                children: List.generate(5, (index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
+  Widget _buildReviewCard(Review review) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ReviewDetailScreen(reviewId: review.id),
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        color: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundImage: NetworkImage(review.authorAvatar),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${5 - index}', style: const TextStyle(fontSize: 12)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: (5 - index) / 5,
-                              backgroundColor: Colors.white10,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.orange.withValues(alpha: 0.7)),
-                              minHeight: 8,
-                            ),
-                          ),
+                        Text(review.authorName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        Row(
+                          children: List.generate(5, (i) {
+                            return Icon(
+                              Icons.star_rounded,
+                              size: 14,
+                              color:
+                                  i < review.rating ? Colors.orange : Colors.white24,
+                            );
+                          }),
                         ),
                       ],
                     ),
-                  );
-                }),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Text(
+                review.content,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.favorite,
+                      size: 14,
+                      color: review.isLikedByCurrentUser
+                          ? Colors.red
+                          : Colors.white54),
+                  const SizedBox(width: 4),
+                  Text('${review.likes}',
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.white54)),
+                  const SizedBox(width: 16),
+                  const Icon(Icons.chat_bubble_outline,
+                      size: 14, color: Colors.white54),
+                  const SizedBox(width: 4),
+                  Text('${review.comments.length}',
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.white54)),
+                ],
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -286,9 +430,13 @@ class _ActionButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Column(
         children: [
-          Icon(icon, color: isActive ? Colors.orange : Colors.white70, size: 28),
+          Icon(icon,
+              color: isActive ? Colors.orange : Colors.white70, size: 28),
           const SizedBox(height: 4),
-          Text(label, style: TextStyle(color: isActive ? Colors.orange : Colors.white70, fontSize: 12)),
+          Text(label,
+              style: TextStyle(
+                  color: isActive ? Colors.orange : Colors.white70,
+                  fontSize: 12)),
         ],
       ),
     );

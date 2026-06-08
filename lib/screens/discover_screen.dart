@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import '../providers/movie_provider.dart';
+import '../models/movie.dart';
 import 'movie_detail_screen.dart';
 import 'feed_screen.dart';
 import 'profile_screen.dart';
+import 'search_results_screen.dart';
+import 'widgets/log_movie_dialog.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -13,6 +18,13 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   int _selectedIndex = 0;
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +35,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         slivers: [
           SliverAppBar(
             floating: true,
+            automaticallyImplyLeading: false,
             title: TextField(
+              controller: _searchController,
+              onSubmitted: (query) {
+                if (query.trim().isNotEmpty) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SearchResultsScreen(query: query.trim()),
+                    ),
+                  );
+                  _searchController.clear();
+                }
+              },
               decoration: InputDecoration(
                 hintText: 'Buscar filmes, séries, diretores...',
                 prefixIcon: const Icon(Icons.search),
@@ -37,45 +61,66 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _buildSectionHeader('Destaques'),
-                const SizedBox(height: 12),
-                _buildHighlightsCarousel(),
-                const SizedBox(height: 24),
-                
-                _buildSectionHeader('Baseado nos seus gostos'),
-                const SizedBox(height: 12),
-                _buildHorizontalList(),
-                const SizedBox(height: 24),
-                
-                _buildSectionHeader('Por décadas'),
-                const SizedBox(height: 12),
-                _buildDecadeChips(),
-                const SizedBox(height: 24),
-                
-                _buildSectionHeader('Em alta na comunidade'),
-                const SizedBox(height: 12),
-              ]),
-            ),
+          Consumer<MovieProvider>(
+            builder: (context, movieProvider, child) {
+              if (movieProvider.isLoading &&
+                  movieProvider.trendingMovies.isEmpty) {
+                return const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              return SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _buildSectionHeader('Destaques'),
+                    const SizedBox(height: 12),
+                    _buildHighlightsCarousel(movieProvider.trendingMovies),
+                    const SizedBox(height: 24),
+                    _buildSectionHeader('Populares'),
+                    const SizedBox(height: 12),
+                    _buildHorizontalList(movieProvider.popularMovies),
+                    const SizedBox(height: 24),
+                    _buildSectionHeader('Em alta na comunidade'),
+                    const SizedBox(height: 12),
+                  ]),
+                ),
+              );
+            },
           ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: _buildTrendingGrid(),
+          Consumer<MovieProvider>(
+            builder: (context, movieProvider, child) {
+              if (movieProvider.trendingMovies.isEmpty) {
+                return const SliverToBoxAdapter(child: SizedBox.shrink());
+              }
+              return SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: _buildTrendingGrid(movieProvider.trendingMovies),
+              );
+            },
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: colorScheme.primary,
+        onPressed: () => LogMovieDialog.show(context),
+        child: const Icon(Icons.add, color: Colors.black),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
+          if (index == _selectedIndex) return;
           setState(() => _selectedIndex = index);
           if (index == 1) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FeedScreen()));
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const FeedScreen()));
+            setState(() => _selectedIndex = 0);
           } else if (index == 2) {
-             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileScreen()));
+            setState(() => _selectedIndex = 0);
           }
         },
         destinations: const [
@@ -103,28 +148,38 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _buildHighlightsCarousel() {
+  Widget _buildHighlightsCarousel(List<Movie> movies) {
+    if (movies.isEmpty) {
+      return const SizedBox(height: 220, child: Center(child: CircularProgressIndicator()));
+    }
+    final displayMovies = movies.take(5).toList();
     return SizedBox(
       height: 220,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: 3,
+        itemCount: displayMovies.length,
         itemBuilder: (context, index) {
+          final movie = displayMovies[index];
           return Container(
             width: 300,
             margin: const EdgeInsets.only(right: 16),
             child: GestureDetector(
-              onTap: () => _navigateToDetail(context),
+              onTap: () => _navigateToDetail(context, movie.id),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    CachedNetworkImage(
-                      imageUrl: 'https://picsum.photos/seed/${index + 10}/400/200',
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(color: Colors.grey[800]),
-                    ),
+                    movie.backdropUrl.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: movie.backdropUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) =>
+                                Container(color: Colors.grey[800]),
+                            errorWidget: (context, url, error) =>
+                                Container(color: Colors.grey[800]),
+                          )
+                        : Container(color: Colors.grey[800]),
                     Positioned(
                       bottom: 0,
                       left: 0,
@@ -135,21 +190,34 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.8)
+                            ],
                           ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Filme de Destaque',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                            Text(
+                              movie.title,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             Row(
                               children: [
-                                Icon(Icons.star, color: Colors.orange[400], size: 16),
+                                Icon(Icons.star,
+                                    color: Colors.orange[400], size: 16),
                                 const SizedBox(width: 4),
-                                const Text('4.5'),
+                                Text(movie.voteAverage.toStringAsFixed(1)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  movie.year,
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 13),
+                                ),
                               ],
                             ),
                           ],
@@ -166,13 +234,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _buildHorizontalList() {
+  Widget _buildHorizontalList(List<Movie> movies) {
+    if (movies.isEmpty) {
+      return const SizedBox(height: 180, child: Center(child: CircularProgressIndicator()));
+    }
+    final displayMovies = movies.take(10).toList();
     return SizedBox(
-      height: 180,
+      height: 200,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: 5,
+        itemCount: displayMovies.length,
         itemBuilder: (context, index) {
+          final movie = displayMovies[index];
           return Container(
             width: 110,
             margin: const EdgeInsets.only(right: 12),
@@ -181,27 +254,47 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               children: [
                 Expanded(
                   child: GestureDetector(
-                    onTap: () => _navigateToDetail(context),
+                    onTap: () => _navigateToDetail(context, movie.id),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
-                        imageUrl: 'https://picsum.photos/seed/${index + 20}/200/300',
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(color: Colors.grey[800]),
-                      ),
+                      child: movie.posterUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: movie.posterUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              placeholder: (context, url) =>
+                                  Container(color: Colors.grey[800]),
+                              errorWidget: (context, url, error) =>
+                                  Container(color: Colors.grey[800]),
+                            )
+                          : Container(color: Colors.grey[800]),
                     ),
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Título do Filme',
+                Text(
+                  movie.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13),
                 ),
-                const Text(
-                  'Gênero',
-                  style: TextStyle(fontSize: 11, color: Colors.white54),
+                Row(
+                  children: [
+                    Icon(Icons.star, color: Colors.orange[400], size: 12),
+                    const SizedBox(width: 2),
+                    Text(
+                      movie.voteAverage.toStringAsFixed(1),
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.white54),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      movie.year,
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.white54),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -211,28 +304,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _buildDecadeChips() {
-    final decades = ['80s', '90s', '2000s', '2010s', '2020s'];
-    return SizedBox(
-      height: 40,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: decades.length,
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(decades[index]),
-              selected: index == 0,
-              onSelected: (_) {},
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildTrendingGrid() {
+  Widget _buildTrendingGrid(List<Movie> movies) {
+    final displayMovies = movies.skip(5).take(6).toList();
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
@@ -242,6 +315,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       ),
       delegate: SliverChildBuilderDelegate(
         (context, index) {
+          final movie = displayMovies[index];
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -249,53 +323,84 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 child: Stack(
                   children: [
                     GestureDetector(
-                      onTap: () => _navigateToDetail(context),
+                      onTap: () => _navigateToDetail(context, movie.id),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: CachedNetworkImage(
-                          imageUrl: 'https://picsum.photos/seed/${index + 30}/200/300',
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(color: Colors.grey[800]),
-                        ),
+                        child: movie.posterUrl.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: movie.posterUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                placeholder: (context, url) =>
+                                    Container(color: Colors.grey[800]),
+                                errorWidget: (context, url, error) =>
+                                    Container(color: Colors.grey[800]),
+                              )
+                            : Container(color: Colors.grey[800]),
                       ),
                     ),
                     Positioned(
                       top: 8,
                       right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(8),
+                      child: GestureDetector(
+                        onTap: () {
+                          context
+                              .read<MovieProvider>()
+                              .toggleWatchlist(movie.id);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Consumer<MovieProvider>(
+                            builder: (context, mp, _) {
+                              return Icon(
+                                mp.isInWatchlist(movie.id)
+                                    ? Icons.bookmark
+                                    : Icons.add,
+                                color: Colors.orange,
+                                size: 20,
+                              );
+                            },
+                          ),
                         ),
-                        child: const Icon(Icons.add, color: Colors.orange, size: 20),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Filme em Alta',
+              Text(
+                movie.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              const Text(
-                '1.2k registros',
-                style: TextStyle(fontSize: 12, color: Colors.white54),
+              Row(
+                children: [
+                  Icon(Icons.star, color: Colors.orange[400], size: 12),
+                  const SizedBox(width: 2),
+                  Text(
+                    movie.voteAverage.toStringAsFixed(1),
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.white54),
+                  ),
+                ],
               ),
             ],
           );
         },
-        childCount: 4,
+        childCount: displayMovies.length,
       ),
     );
   }
 
-  void _navigateToDetail(BuildContext context) {
+  void _navigateToDetail(BuildContext context, int movieId) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MovieDetailScreen()),
+      MaterialPageRoute(
+          builder: (_) => MovieDetailScreen(movieId: movieId)),
     );
   }
 }

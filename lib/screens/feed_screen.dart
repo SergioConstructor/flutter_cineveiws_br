@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import '../providers/social_provider.dart';
+import '../models/review.dart';
+import 'review_detail_screen.dart';
+import 'public_profile_screen.dart';
 
 class FeedScreen extends StatelessWidget {
   const FeedScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final colorscheme = Theme.of(context).colorScheme;
-
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -31,30 +34,72 @@ class FeedScreen extends StatelessWidget {
             indicatorSize: TabBarIndicatorSize.tab,
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildFeedList(context, 'amigo'),
-            _buildFeedList(context, 'comunidade'),
-          ],
+        body: Consumer<SocialProvider>(
+          builder: (context, socialProvider, _) {
+            if (socialProvider.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final reviews = socialProvider.feedReviews;
+
+            return TabBarView(
+              children: [
+                _buildFeedList(context, reviews, socialProvider, true),
+                _buildFeedList(context, reviews, socialProvider, false),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildFeedList(BuildContext context, String type) {
+  Widget _buildFeedList(BuildContext context, List<Review> reviews,
+      SocialProvider socialProvider, bool friendsOnly) {
+    List<Review> displayReviews = reviews;
+
+    if (friendsOnly && socialProvider.currentUser != null) {
+      final followingUsernames = socialProvider
+          .getFollowing(socialProvider.currentUser!.id)
+          .map((p) => p.username)
+          .toSet();
+      displayReviews = reviews
+          .where((r) => followingUsernames.contains(r.authorUsername))
+          .toList();
+    }
+
+    if (displayReviews.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.movie_filter_outlined,
+                size: 64, color: Colors.white.withOpacity(0.2)),
+            const SizedBox(height: 16),
+            Text(
+              friendsOnly
+                  ? 'Nenhuma atividade de amigos ainda.\nSiga mais pessoas para ver seu feed!'
+                  : 'Nenhuma atividade na comunidade ainda.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54),
+            ),
+          ],
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: 10,
+      itemCount: displayReviews.length,
       itemBuilder: (context, index) {
-        return _buildFeedItem(context, index);
+        return _buildFeedItem(context, displayReviews[index], socialProvider);
       },
     );
   }
 
-  Widget _buildFeedItem(BuildContext context, int index) {
+  Widget _buildFeedItem(
+      BuildContext context, Review review, SocialProvider socialProvider) {
     final colorScheme = Theme.of(context).colorScheme;
-    final bool isReview = index % 3 == 0;
-    final bool isList = index % 3 == 1;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 20),
@@ -65,42 +110,59 @@ class FeedScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=${index + 50}'),
-                  radius: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      RichText(
-                        text: TextSpan(
-                          style: const TextStyle(color: Colors.white, fontSize: 14),
-                          children: [
-                            TextSpan(
-                              text: 'Usuário ${index + 1} ',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            TextSpan(
-                              text: isReview 
-                                  ? 'escreveu uma resenha' 
-                                  : (isList ? 'criou uma lista' : 'avaliou'),
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Text(
-                        'há 2 horas',
-                        style: TextStyle(fontSize: 11, color: Colors.white54),
-                      ),
-                    ],
+            GestureDetector(
+              onTap: () {
+                final profile = socialProvider.allProfiles.firstWhere(
+                  (p) => p.username == review.authorUsername,
+                  orElse: () => socialProvider.currentUser!,
+                );
+                if (profile.id != socialProvider.currentUser?.id) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          PublicProfileScreen(userId: profile.id),
+                    ),
+                  );
+                }
+              },
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundImage: NetworkImage(review.authorAvatar),
+                    radius: 20,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        RichText(
+                          text: TextSpan(
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 14),
+                            children: [
+                              TextSpan(
+                                text: '${review.authorName} ',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              const TextSpan(
+                                text: 'escreveu uma resenha',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          _formatTimeAgo(review.createdAt),
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.white54),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -108,47 +170,50 @@ class FeedScreen extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                    imageUrl: 'https://picsum.photos/seed/${index + 40}/100/150',
-                    width: 70,
-                    height: 100,
-                    fit: BoxFit.cover,
-                  ),
+                  child: review.moviePosterUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: review.moviePosterUrl,
+                          width: 70,
+                          height: 100,
+                          fit: BoxFit.cover,
+                          placeholder: (c, u) =>
+                              Container(width: 70, height: 100, color: Colors.grey[800]),
+                          errorWidget: (c, u, e) =>
+                              Container(width: 70, height: 100, color: Colors.grey[800]),
+                        )
+                      : Container(
+                          width: 70, height: 100, color: Colors.grey[800]),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Interestelar',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      Text(
+                        review.movieTitle,
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
-                      if (!isList) ...[
-                        Row(
-                          children: List.generate(5, (starIndex) {
-                            return Icon(
-                              Icons.star_rounded,
-                              size: 18,
-                              color: starIndex < 4 ? Colors.orange : Colors.white24,
-                            );
-                          }),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (isReview) 
-                        const Text(
-                          'Uma obra-prima visual e emocional. Christopher Nolan consegue misturar física teórica com uma jornada humana profunda...',
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 13, color: Colors.white70),
-                        ),
-                      if (isList)
-                        const Text(
-                          'Lista: "Ficção Científica de Pirar o Cabeção"',
-                          style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
-                        ),
+                      Row(
+                        children: List.generate(5, (starIndex) {
+                          return Icon(
+                            Icons.star_rounded,
+                            size: 18,
+                            color: starIndex < review.rating
+                                ? Colors.orange
+                                : Colors.white24,
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        review.content,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 13, color: Colors.white70),
+                      ),
                     ],
                   ),
                 ),
@@ -159,29 +224,64 @@ class FeedScreen extends StatelessWidget {
             Row(
               children: [
                 IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.favorite_border_rounded, size: 20),
+                  onPressed: () {
+                    context.read<SocialProvider>().toggleLikeReview(review.id);
+                  },
+                  icon: Icon(
+                    review.isLikedByCurrentUser
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    size: 20,
+                    color:
+                        review.isLikedByCurrentUser ? Colors.red : null,
+                  ),
                   visualDensity: VisualDensity.compact,
                 ),
-                const Text('24', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                Text('${review.likes}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.white70)),
                 const SizedBox(width: 16),
                 IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ReviewDetailScreen(reviewId: review.id),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.chat_bubble_outline_rounded,
+                      size: 20),
                   visualDensity: VisualDensity.compact,
                 ),
-                const Text('5', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                Text('${review.comments.length}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.white70)),
                 const Spacer(),
-                if (isReview)
-                  TextButton(
-                    onPressed: () {},
-                    child: const Text('Ver mais'),
-                  ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ReviewDetailScreen(reviewId: review.id),
+                      ),
+                    );
+                  },
+                  child: const Text('Ver mais'),
+                ),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _formatTimeAgo(DateTime dateTime) {
+    final diff = DateTime.now().difference(dateTime);
+    if (diff.inMinutes < 60) return 'há ${diff.inMinutes}min';
+    if (diff.inHours < 24) return 'há ${diff.inHours}h';
+    if (diff.inDays < 7) return 'há ${diff.inDays}d';
+    return 'há ${diff.inDays ~/ 7} sem';
   }
 }
