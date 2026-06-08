@@ -245,6 +245,10 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                                                       Container(
                                                           color: Colors
                                                               .grey[800]),
+                                                  errorWidget: (c, u, e) =>
+                                                      Container(
+                                                          color: Colors
+                                                              .grey[800]),
                                                 )
                                               : Container(
                                                   color: Colors.grey[800]),

@@ -173,9 +173,43 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-class _MoviesTab extends StatelessWidget {
+class _MoviesTab extends StatefulWidget {
+  const _MoviesTab();
+
+  @override
+  State<_MoviesTab> createState() => _MoviesTabState();
+}
+
+class _MoviesTabState extends State<_MoviesTab> with AutomaticKeepAliveClientMixin {
+  Future<List<Map<String, dynamic>>>? _watchedMoviesFuture;
+  List<int>? _cachedIds;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  bool _listEquals(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  Future<List<Map<String, dynamic>>> _loadWatchedMovies(
+      MovieProvider provider, List<int> ids) async {
+    final results = <Map<String, dynamic>>[];
+    for (final id in ids.take(20)) {
+      final movie = await provider.getMovieDetails(id);
+      if (movie != null) {
+        results.add({'id': movie.id, 'posterUrl': movie.posterUrl});
+      }
+    }
+    return results;
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<MovieProvider>(
       builder: (context, movieProvider, _) {
         final watchedIds = movieProvider.watchedMovieIds.toList();
@@ -198,11 +232,19 @@ class _MoviesTab extends StatelessWidget {
           );
         }
 
+        if (_cachedIds == null || !_listEquals(_cachedIds!, watchedIds)) {
+          _cachedIds = watchedIds;
+          _watchedMoviesFuture = _loadWatchedMovies(movieProvider, watchedIds);
+        }
+
         return FutureBuilder<List<Map<String, dynamic>>>(
-          future: _loadWatchedMovies(movieProvider, watchedIds),
+          future: _watchedMoviesFuture,
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError || !snapshot.hasData) {
+              return const Center(child: Text('Erro ao carregar filmes'));
             }
 
             final movies = snapshot.data!;
@@ -251,30 +293,27 @@ class _MoviesTab extends StatelessWidget {
       },
     );
   }
-
-  Future<List<Map<String, dynamic>>> _loadWatchedMovies(
-      MovieProvider provider, List<int> ids) async {
-    final results = <Map<String, dynamic>>[];
-    for (final id in ids.take(20)) {
-      final movie = await provider.getMovieDetails(id);
-      if (movie != null) {
-        results.add({'id': movie.id, 'posterUrl': movie.posterUrl});
-      }
-    }
-    return results;
-  }
 }
 
-class _ReviewsTab extends StatelessWidget {
+class _ReviewsTab extends StatefulWidget {
   final String username;
 
   const _ReviewsTab({required this.username});
 
   @override
+  State<_ReviewsTab> createState() => _ReviewsTabState();
+}
+
+class _ReviewsTabState extends State<_ReviewsTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<SocialProvider>(
       builder: (context, socialProvider, _) {
-        final reviews = socialProvider.getReviewsByUser(username);
+        final reviews = socialProvider.getReviewsByUser(widget.username);
 
         if (reviews.isEmpty) {
           return Center(
@@ -324,6 +363,8 @@ class _ReviewsTab extends StatelessWidget {
                                 width: 40,
                                 height: 60,
                                 fit: BoxFit.cover,
+                                placeholder: (c, u) => Container(color: Colors.grey[800]),
+                                errorWidget: (c, u, e) => Container(color: Colors.grey[800]),
                               ),
                             ),
                           const SizedBox(width: 12),
@@ -370,16 +411,25 @@ class _ReviewsTab extends StatelessWidget {
   }
 }
 
-class _ListsTab extends StatelessWidget {
+class _ListsTab extends StatefulWidget {
   final String authorId;
 
   const _ListsTab({required this.authorId});
 
   @override
+  State<_ListsTab> createState() => _ListsTabState();
+}
+
+class _ListsTabState extends State<_ListsTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<ListProvider>(
       builder: (context, listProvider, _) {
-        final lists = listProvider.getListsByAuthor(authorId);
+        final lists = listProvider.getListsByAuthor(widget.authorId);
 
         return Column(
           children: [
@@ -503,9 +553,20 @@ class _ListsTab extends StatelessWidget {
   }
 }
 
-class _DiaryTab extends StatelessWidget {
+class _DiaryTab extends StatefulWidget {
+  const _DiaryTab();
+
+  @override
+  State<_DiaryTab> createState() => _DiaryTabState();
+}
+
+class _DiaryTabState extends State<_DiaryTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<DiaryProvider>(
       builder: (context, diaryProvider, _) {
         final entries = diaryProvider.allEntriesSorted;
@@ -571,6 +632,8 @@ class _DiaryTab extends StatelessWidget {
                               width: 35,
                               height: 50,
                               fit: BoxFit.cover,
+                              placeholder: (c, u) => Container(color: Colors.grey[800]),
+                              errorWidget: (c, u, e) => Container(color: Colors.grey[800]),
                             )
                           : Container(
                               width: 35,
